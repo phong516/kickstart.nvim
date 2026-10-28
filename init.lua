@@ -215,6 +215,7 @@ do
 
   vim.keymap.set('n', '<leader>q', vim.diagnostic.setloclist, { desc = 'Open diagnostic [Q]uickfix list' })
 
+  -- Navigate and close open file buffers
   -- Exit terminal mode in the builtin terminal with a shortcut that is a bit easier
   -- for people to discover. Otherwise, you normally need to press <C-\><C-n>, which
   -- is not what someone will guess without a bit more experience.
@@ -254,6 +255,14 @@ do
     desc = 'Highlight when yanking (copying) text',
     group = vim.api.nvim_create_augroup('kickstart-highlight-yank', { clear = true }),
     callback = function() vim.hl.on_yank() end,
+  })
+
+  vim.api.nvim_create_autocmd('VimEnter', {
+    group = vim.api.nvim_create_augroup('kickstart-hide-startup-buffer', { clear = true }),
+    callback = function()
+      local buf = vim.api.nvim_get_current_buf()
+      if vim.fn.argc() == 0 and vim.api.nvim_buf_get_name(buf) == '' and vim.bo[buf].buftype == '' then vim.bo[buf].buflisted = false end
+    end,
   })
 end
 
@@ -421,6 +430,71 @@ do
     },
   }
 
+  -- Show open file buffers as clickable tabs, like a browser tab bar.
+  vim.pack.add { gh 'akinsho/bufferline.nvim', gh 'nvim-tree/nvim-web-devicons' }
+  local function is_file_buffer(bufnr)
+    return vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].buftype == '' and vim.api.nvim_buf_get_name(bufnr) ~= ''
+  end
+
+  local function file_window()
+    local current = vim.api.nvim_get_current_win()
+    if is_file_buffer(vim.api.nvim_win_get_buf(current)) then return current end
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      if is_file_buffer(vim.api.nvim_win_get_buf(win)) then return win end
+    end
+  end
+
+  local function cycle_file_buffer(command)
+    local win = file_window()
+    if not win then return end
+    vim.api.nvim_set_current_win(win)
+    vim.cmd(command)
+  end
+
+  local function close_buffer(bufnr)
+    if not is_file_buffer(bufnr) then return end
+    if vim.bo[bufnr].modified then
+      vim.notify('Save the buffer before closing it', vim.log.levels.WARN)
+      return
+    end
+
+    local replacement
+    for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+      if buffer ~= bufnr and is_file_buffer(buffer) then
+        replacement = buffer
+        break
+      end
+    end
+
+    for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+      vim.api.nvim_win_set_buf(win, replacement or vim.api.nvim_create_buf(false, false))
+    end
+    vim.api.nvim_buf_delete(bufnr, { force = false })
+  end
+
+  require('bufferline').setup {
+    options = {
+      mode = 'buffers',
+      close_command = close_buffer,
+      right_mouse_command = close_buffer,
+      show_close_icon = false,
+      separator_style = 'thin',
+      custom_filter = function(bufnr)
+        return vim.bo[bufnr].buftype == '' and vim.api.nvim_buf_get_name(bufnr) ~= ''
+      end,
+      offsets = {
+        { filetype = 'neo-tree', text = '', text_align = 'left', separator = false },
+      },
+    },
+  }
+
+  vim.keymap.set('n', '<leader>bn', function() cycle_file_buffer('BufferLineCycleNext') end, { desc = 'Next file tab' })
+  vim.keymap.set('n', '<leader>bp', function() cycle_file_buffer('BufferLineCyclePrev') end, { desc = 'Previous file tab' })
+  vim.keymap.set('n', '<leader>bd', function()
+    local win = file_window()
+    if win then close_buffer(vim.api.nvim_win_get_buf(win)) end
+  end, { desc = 'Close current file tab' })
+
   -- [[ Colorscheme ]]
   -- You can easily change to a different colorscheme.
   -- Change the name of the colorscheme plugin below, and then
@@ -535,6 +609,9 @@ do
   vim.pack.add(telescope_plugins)
 
   -- See `:help telescope` and `:help telescope.setup()`
+  vim.pack.add { gh 'MagicDuck/grug-far.nvim' }
+  require('grug-far').setup {}
+
   require('telescope').setup {
     -- You can put your default mappings / updates / etc. in here
     --  All the info you're looking for is in `:help telescope.setup()`
@@ -562,6 +639,8 @@ do
   vim.keymap.set('n', '<leader>ss', builtin.builtin, { desc = '[S]earch [S]elect Telescope' })
   vim.keymap.set({ 'n', 'v' }, '<leader>sw', builtin.grep_string, { desc = '[S]earch current [W]ord' })
   vim.keymap.set('n', '<leader>sg', builtin.live_grep, { desc = '[S]earch by [G]rep' })
+  vim.keymap.set('n', '<leader>sR', function() require('grug-far').open { transient = true } end, { desc = '[S]earch and [R]eplace' })
+  vim.keymap.set('x', '<leader>sR', function() require('grug-far').with_visual_selection { transient = true } end, { desc = 'Replace selected text' })
   vim.keymap.set('n', '<leader>sd', builtin.diagnostics, { desc = '[S]earch [D]iagnostics' })
   vim.keymap.set('n', '<leader>sr', builtin.resume, { desc = '[S]earch [R]esume' })
   vim.keymap.set('n', '<leader>s.', builtin.oldfiles, { desc = '[S]earch Recent Files ("." for repeat)' })
@@ -586,6 +665,7 @@ do
       -- This is where a variable was first declared, or where a function is defined, etc.
       -- To jump back, press <C-t>.
       vim.keymap.set('n', 'grd', builtin.lsp_definitions, { buffer = buf, desc = '[G]oto [D]efinition' })
+        vim.keymap.set('n', '<F12>', builtin.lsp_definitions, { buffer = buf, desc = 'Go to definition' })
 
       -- Fuzzy find all the symbols in your current document.
       -- Symbols are things like variables, functions, types, etc.
@@ -688,6 +768,7 @@ do
       -- Execute a code action, usually your cursor needs to be on top of an error
       -- or a suggestion from your LSP for this to activate.
       map('gra', vim.lsp.buf.code_action, '[G]oto Code [A]ction', { 'n', 'x' })
+  map('<C-.>', vim.lsp.buf.code_action, 'Quick fix / code action', { 'n', 'x' })
 
       -- WARN: This is not Goto Definition, this is Goto Declaration.
       --  For example, in C this would take you to the header.
@@ -1018,40 +1099,14 @@ do
   --  Here are some example plugins that I've included in the Kickstart repository.
   --  Uncomment any of the lines below to enable them (you will need to restart nvim).
   --
-  -- require 'kickstart.plugins.debug',
-  require 'kickstart.plugins.indent_line',
+   require 'kickstart.plugins.debug'
+  require 'kickstart.plugins.indent_line'
   -- require 'kickstart.plugins.lint',
-  require 'kickstart.plugins.autopairs',
-  require 'kickstart.plugins.neo-tree',
-  require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
+  require 'kickstart.plugins.autopairs'
+  require 'kickstart.plugins.neo-tree'
 
-  -- NOTE: The import below can automatically add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
-  --    This is the easiest way to modularize your config.
-  --
-  --  Uncomment the following line and add your plugins to `lua/custom/plugins/*.lua` to get going.
-  --    For additional information, see `:help lazy.nvim-lazy.nvim-structuring-your-plugins`
-  { import = 'custom.plugins' },
-}, {
-  ui = {
-    -- If you are using a Nerd Font: set icons to an empty table which will use the
-    -- default lazy.nvim defined Nerd Font icons, otherwise define a unicode icons table
-    icons = vim.g.have_nerd_font and {} or {
-      cmd = '⌘',
-      config = '🛠',
-      event = '📅',
-      ft = '📂',
-      init = '⚙',
-      keys = '🗝',
-      plugin = '🔌',
-      runtime = '💻',
-      require = '🌙',
-      source = '📄',
-      start = '🚀',
-      task = '📌',
-      lazy = '💤 ',
-    },
-  },
-})
+  require 'custom.plugins'
+end
 
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et

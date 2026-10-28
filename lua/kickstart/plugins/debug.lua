@@ -1,10 +1,6 @@
 -- debug.lua
 --
--- Shows how to use the DAP plugin to debug your code.
---
--- Primarily focused on configuring the debugger for Go, but can
--- be extended to other languages as well. That's why it's called
--- kickstart.nvim and not kitchen-sink.nvim ;)
+-- DAP setup for C and C++ debugging.
 
 vim.pack.add {
   'https://github.com/mfussenegger/nvim-dap',
@@ -12,11 +8,12 @@ vim.pack.add {
   'https://github.com/nvim-neotest/nvim-nio',
   'https://github.com/mason-org/mason.nvim',
   'https://github.com/jay-babu/mason-nvim-dap.nvim',
-  'https://github.com/leoluz/nvim-dap-go',
 }
 
 -- Basic debugging keymaps, feel free to change to your liking!
 vim.keymap.set('n', '<F5>', function() require('dap').continue() end, { desc = 'Debug: Start/Continue' })
+vim.keymap.set('n', '<S-F5>', function() require('dap').terminate() end, { desc = 'Debug: Stop' })
+vim.keymap.set('n', '<C-S-F5>', function() require('dap').restart() end, { desc = 'Debug: Restart' })
 vim.keymap.set('n', '<F1>', function() require('dap').step_into() end, { desc = 'Debug: Step Into' })
 vim.keymap.set('n', '<F2>', function() require('dap').step_over() end, { desc = 'Debug: Step Over' })
 vim.keymap.set('n', '<F3>', function() require('dap').step_out() end, { desc = 'Debug: Step Out' })
@@ -40,10 +37,34 @@ require('mason-nvim-dap').setup {
   -- You'll need to check that you have the required things installed
   -- online, please don't ask me how to install them :)
   ensure_installed = {
-    -- Update this to ensure that you have the debuggers for the langs you want
-    'delve',
+    'codelldb',
   },
 }
+
+dap.configurations.cpp = {
+  {
+    name = 'Launch active C++ file',
+    type = 'codelldb',
+    request = 'launch',
+    program = function()
+      local source_executable = vim.fn.expand '%:p:r'
+      if vim.fn.executable(source_executable) == 1 then return source_executable end
+
+      local executable_name = vim.fn.expand '%:t:r'
+      local build_directory = vim.fn.getcwd() .. '/build'
+      local candidates = vim.fn.globpath(build_directory, '**/' .. executable_name, false, true)
+      candidates = vim.tbl_filter(function(path) return vim.fn.executable(path) == 1 end, candidates)
+
+      if #candidates == 1 then return candidates[1] end
+
+      local prompt = #candidates > 1 and 'Executable path (multiple matches): ' or 'Executable path: '
+      return vim.fn.input(prompt, candidates[1] or source_executable, 'file')
+    end,
+    cwd = function() return vim.fn.expand '%:p:h' end,
+    stopOnEntry = false,
+  },
+}
+dap.configurations.c = dap.configurations.cpp
 
 -- Dap UI setup
 -- For more information, see |:help nvim-dap-ui|
@@ -85,11 +106,3 @@ dap.listeners.after.event_initialized['dapui_config'] = dapui.open
 dap.listeners.before.event_terminated['dapui_config'] = dapui.close
 dap.listeners.before.event_exited['dapui_config'] = dapui.close
 
--- Install golang specific config
-require('dap-go').setup {
-  delve = {
-    -- On Windows delve must be run attached or it crashes.
-    -- See https://github.com/leoluz/nvim-dap-go/blob/main/README.md#configuring
-    detached = vim.fn.has 'win32' == 0,
-  },
-}
