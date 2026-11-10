@@ -99,7 +99,7 @@ do
   vim.g.maplocalleader = ' '
 
 -- Set to true if you have a Nerd Font installed and selected in the terminal
-vim.g.have_nerd_font = true
+vim.g.have_nerd_font = false
 
   -- [[ Setting options ]]
   --  See `:help vim.o`
@@ -818,7 +818,7 @@ do
   --  See `:help lsp-config` for information about keys and how to configure
   ---@type table<string, vim.lsp.Config>
   local servers = {
-    clangd = {},
+    clangd = { cmd = { 'clangd', '--fallback-style=Microsoft' } },
     -- gopls = {},
     -- pyright = {},
     -- tsc = {},
@@ -1099,7 +1099,7 @@ do
   --  Here are some example plugins that I've included in the Kickstart repository.
   --  Uncomment any of the lines below to enable them (you will need to restart nvim).
   --
-   require 'kickstart.plugins.debug'
+  require 'kickstart.plugins.debug'
   require 'kickstart.plugins.indent_line'
   -- require 'kickstart.plugins.lint',
   require 'kickstart.plugins.autopairs'
