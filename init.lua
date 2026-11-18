@@ -122,10 +122,32 @@ vim.o.tabstop = 4
 vim.o.softtabstop = 4
 vim.o.shiftwidth = 4
 
-  -- Sync clipboard between OS and Neovim.
-  --  Schedule the setting after `UiEnter` because it can increase startup-time.
-  --  Remove this option if you want your OS clipboard to remain independent.
-  --  See `:help 'clipboard'`
+    vim.g.clipboard = {
+      name = 'WindowsClipboard',
+      copy = {
+        ['+'] = { 'clip.exe' },
+        ['*'] = { 'clip.exe' },
+      },
+      paste = {
+        ['+'] = {
+          'powershell.exe',
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard -Raw',
+        },
+        ['*'] = {
+          'powershell.exe',
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Clipboard -Raw',
+        },
+      },
+      cache_enabled = 0,
+    }
   vim.schedule(function() vim.o.clipboard = 'unnamedplus' end)
 
   -- Enable break indent
@@ -871,6 +893,9 @@ do
     gh 'WhoIsSethDaniel/mason-tool-installer.nvim',
   }
 
+  local qmlls_path = vim.env.QMLLS_PATH
+  if not qmlls_path or qmlls_path == '' then qmlls_path = vim.fn.exepath 'qmlls' end
+
   -- Automatically install LSPs and related tools to stdpath for Neovim
   require('mason').setup {}
 
@@ -897,6 +922,14 @@ do
     vim.lsp.config(name, server)
     vim.lsp.enable(name)
   end
+
+  if qmlls_path == '' then qmlls_path = 'qmlls' end
+  vim.lsp.config('qmlls', {
+    cmd = { qmlls_path },
+    filetypes = { 'qml' },
+    root_markers = { 'qmldir', 'CMakeLists.txt', '.git' },
+  })
+  vim.lsp.enable('qmlls')
 end
 
 -- ============================================================
